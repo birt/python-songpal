@@ -1,13 +1,13 @@
-import attr
 import logging
 
-from async_upnp_client.aiohttp import AiohttpRequester
+import attr
 from async_upnp_client import UpnpFactory
+from async_upnp_client.aiohttp import AiohttpRequester
+
+from .containers import make
 
 _LOGGER = logging.getLogger(__name__)
 
-
-from .containers import make
 
 @attr.s
 class GroupState:
@@ -85,43 +85,49 @@ class GroupControl:
         factory = UpnpFactory(requester)
         device = await factory.async_create_device(self.url)
 
-        self.service = device.service('urn:schemas-sony-com:service:Group:1')
+        self.service = device.service("urn:schemas-sony-com:service:Group:1")
         if not self.service:
             _LOGGER.error("Unable to find group service!")
             return False
 
         for act in self.service.actions.values():
-            _LOGGER.debug("Action: %s (%s)", act, [arg.name for arg in act.in_arguments()])
+            _LOGGER.debug(
+                "Action: %s (%s)", act, [arg.name for arg in act.in_arguments()]
+            )
 
         return True
 
         """
         Available actions
 
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_GetDeviceInfo)> ([])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_GetState)> ([])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_GetStateM)> ([])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_SetGroupName)> (['GroupName'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_ChangeGroupVolume)> (['GroupVolume'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_GetAllGroupMemory)> ([])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_DeleteGroupMemory)> (['MemoryID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_UpdateGroupMemory)> (['MemoryID', 'GroupMode', 'GroupName', 'SlaveList', 'CodecType', 'CodecBitrate'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Start)> (['GroupMode', 'GroupName', 'SlaveList', 'CodecType', 'CodecBitrate'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Entry)> (['MasterSessionID', 'SlaveList'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_EntryM)> (['MasterSessionID', 'SlaveList'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Leave)> (['MasterSessionID', 'SlaveList'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_LeaveM)> (['MasterSessionID', 'SlaveList'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Abort)> (['MasterSessionID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_SetGroupMute)> (['GroupMute'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_SetCodec)> (['CodecType', 'CodecBitrate'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_GetCodec)> ([])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Invite)> (['GroupMode', 'GroupName', 'MasterUUID', 'MasterSessionID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Exit)> (['SlaveSessionID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Play)> (['MasterSessionID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Stop)> (['MasterSessionID'])
-        INFO:songpal.upnpctl:Action: <UpnpService.Action(X_Delegate)> (['GroupMode', 'SlaveList', 'DelegateURI', 'DelegateURIMetaData'])
-
+        <UpnpService.Action(X_GetDeviceInfo)> ([])
+        <UpnpService.Action(X_GetState)> ([])
+        <UpnpService.Action(X_GetStateM)> ([])
+        <UpnpService.Action(X_SetGroupName)> (['GroupName'])
+        <UpnpService.Action(X_ChangeGroupVolume)> (['GroupVolume'])
+        <UpnpService.Action(X_GetAllGroupMemory)> ([])
+        <UpnpService.Action(X_DeleteGroupMemory)> (['MemoryID'])
+        <UpnpService.Action(X_UpdateGroupMemory)> (['MemoryID', 'GroupMode',
+            'GroupName', 'SlaveList', 'CodecType', 'CodecBitrate'])
+        <UpnpService.Action(X_Start)> (['GroupMode', 'GroupName', 'SlaveList',
+            'CodecType', 'CodecBitrate'])
+        <UpnpService.Action(X_Entry)> (['MasterSessionID', 'SlaveList'])
+        <UpnpService.Action(X_EntryM)> (['MasterSessionID', 'SlaveList'])
+        <UpnpService.Action(X_Leave)> (['MasterSessionID', 'SlaveList'])
+        <UpnpService.Action(X_LeaveM)> (['MasterSessionID', 'SlaveList'])
+        <UpnpService.Action(X_Abort)> (['MasterSessionID'])
+        <UpnpService.Action(X_SetGroupMute)> (['GroupMute'])
+        <UpnpService.Action(X_SetCodec)> (['CodecType', 'CodecBitrate'])
+        <UpnpService.Action(X_GetCodec)> ([])
+        <UpnpService.Action(X_Invite)> (['GroupMode', 'GroupName', 'MasterUUID',
+            'MasterSessionID'])
+        <UpnpService.Action(X_Exit)> (['SlaveSessionID'])
+        <UpnpService.Action(X_Play)> (['MasterSessionID'])
+        <UpnpService.Action(X_Stop)> (['MasterSessionID'])
+        <UpnpService.Action(X_Delegate)> (['GroupMode', 'SlaveList', 'DelegateURI',
+            'DelegateURIMetaData'])
         """
+
     async def call(self, action, **kwargs):
         """Make an action call with given kwargs."""
         act = self.service.action(action)
@@ -131,7 +137,6 @@ class GroupControl:
         _LOGGER.info("  Result: %s" % res)
 
         return res
-
 
     async def info(self):
         """Return device info."""
@@ -161,22 +166,26 @@ class GroupControl:
         res = await act.async_call()
         return res
 
-    async def update_group_memory(self, memory_id, mode, name, slaves, codectype=0x0040, bitrate=0x0003):
+    async def update_group_memory(
+        self, memory_id, mode, name, slaves, codectype=0x0040, bitrate=0x0003
+    ):
         """Update existing memory? Can be used to create new ones, too?"""
         act = self.service.action("X_UpdateGroupMemory")
-        res = await act.async_call(MemoryID=memory_id,
-                                   GroupMode=mode,
-                                   GroupName=name,
-                                   SlaveList=slaves,
-                                   CodecType=codectype,
-                                   CodecBitrate=bitrate)
+        res = await act.async_call(
+            MemoryID=memory_id,
+            GroupMode=mode,
+            GroupName=name,
+            SlaveList=slaves,
+            CodecType=codectype,
+            CodecBitrate=bitrate,
+        )
 
         return res
 
     async def delete_group_memory(self, memory_id):
         """Delete group memory."""
         act = self.service.action("X_DeleteGroupMemory")
-        res = await act.async_call(MemoryID=memory_id)
+        return await act.async_call(MemoryID=memory_id)
 
     async def get_codec(self):
         """Get codec settings."""
@@ -193,43 +202,62 @@ class GroupControl:
     async def abort(self):
         """Abort current group session."""
         state = await self.state()
-        res = await self.call("X_Abort", MasterSessionID=state.MasterSessionID)
+        res = await self.call("X_Abort", MasterSessionID=state.SessionID)
         return res
 
     async def stop(self):
         """Stop playback?"""
         state = await self.state()
-        res = await self.call("X_Stop", MasterSessionID=state.MasterSessionID)
+        res = await self.call("X_Stop", MasterSessionID=state.SessionID)
         return res
 
     async def play(self):
         """Start playback?"""
         state = await self.state()
-        res = await self.call("X_Play", MasterSessionID=state.MasterSessionID)
+        res = await self.call("X_Play", MasterSessionID=state.SessionID)
         return res
 
     async def create(self, name, slaves):
         """Create a group."""
         # NOTE: codectype and codecbitrate were simply chosen from an example..
-        res = await self.call("X_Start", GroupMode="GROUP",
-                              GroupName=name,
-                              SlaveList=",".join(slaves),
-                              CodecType=0x0040,
-                              CodecBitrate=0x0003)
+        res = await self.call(
+            "X_Start",
+            GroupMode="GROUP",
+            GroupName=name,
+            SlaveList=",".join(slaves),
+            CodecType=0x0040,
+            CodecBitrate=0x0003,
+        )
         return res
 
     async def add(self, slaves):
+        """Add slaves to the current group."""
         state = await self.state()
-        res = await self.call("X_Entry", MasterSessionID=state.MasterSessionID, SlaveList=slaves)
+        res = await self.call(
+            "X_Entry", MasterSessionID=state.SessionID, SlaveList=slaves
+        )
         return res
 
-    async def remove(self, slaves):
+    async def add_m(self, slaves):
+        """Unknown usage."""
         state = await self.state()
-        res = await self.call("X_Leave", MasterSessionID=state.MasterSessionID, SlaveList=slaves)
+        return await self.call(
+            "X_EntryM", MasterSessionID=state.SessionID, SlaveList=slaves
+        )
 
-    # What does these do?
-    # INFO: songpal.upnpctl:Action: < UpnpService.Action(X_EntryM) > (['MasterSessionID', 'SlaveList'])
-    # INFO: songpal.upnpctl:Action: < UpnpService.Action(X_LeaveM) > (['MasterSessionID', 'SlaveList'])
+    async def remove(self, slaves):
+        """Remove slaves from the current group."""
+        state = await self.state()
+        return await self.call(
+            "X_Leave", MasterSessionID=state.SessionID, SlaveList=slaves
+        )
+
+    async def remove_m(self, slaves):
+        """Unknown usage."""
+        state = await self.state()
+        return await self.call(
+            "X_LeaveM", MasterSessionID=state.SessionID, SlaveList=slaves
+        )
 
     async def set_mute(self, activate):
         """Set group mute."""

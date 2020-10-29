@@ -1,34 +1,34 @@
 """Click-based interface for Songpal."""
 import ast
 import asyncio
-from functools import update_wrapper
 import json
 import logging
 import sys
+from functools import update_wrapper
 
 import click
-import requests
 
 from songpal import Device, SongpalException
 from songpal.common import ProtocolType
 from songpal.containers import Setting
 from songpal.discovery import Discover
-from songpal.notification import VolumeChange, PowerChange, ContentChange
 from songpal.group import GroupControl
 
 
 class OnOffBoolParamType(click.ParamType):
-    name = 'boolean'
+    name = "boolean"
 
     def convert(self, value, param, ctx):
-        if value == 'on':
+        if value == "on":
             return True
-        elif value == 'off':
+        elif value == "off":
             return False
-        else: 
+        else:
             return click.BOOL.convert(value, param, ctx)
 
+
 ONOFF_BOOL = OnOffBoolParamType()
+
 
 def err(msg):
     """Pretty-print an error."""
@@ -104,6 +104,7 @@ def print_settings(settings, depth=0):
 
 pass_dev = click.make_pass_decorator(Device)
 
+
 @click.group(invoke_without_command=False)
 @click.option("--endpoint", envvar="SONGPAL_ENDPOINT", required=False)
 @click.option("-d", "--debug", default=False, count=True)
@@ -141,7 +142,7 @@ async def cli(ctx, endpoint, debug, websocket, post):
     x = Device(endpoint, force_protocol=protocol, debug=debug)
     try:
         await x.get_supported_methods()
-    except (requests.exceptions.ConnectionError, SongpalException) as ex:
+    except SongpalException as ex:
         err("Unable to get supported methods: %s" % ex)
         sys.exit(-1)
     ctx.obj = x
@@ -157,7 +158,7 @@ async def cli(ctx, endpoint, debug, websocket, post):
 async def status(dev: Device):
     """Display status information."""
     power = await dev.get_power()
-    click.echo(click.style("%s" % power, bold=power))
+    click.echo(click.style("%s" % power, bold=bool(power)))
 
     vol = await dev.get_volume_information()
     click.echo(vol.pop())
@@ -215,6 +216,7 @@ async def power(dev: Device, cmd, target, value):
 
     Accepts commands 'on', 'off', and 'settings'.
     """
+
     async def try_turn(cmd):
         state = True if cmd == "on" else False
         try:
@@ -234,7 +236,7 @@ async def power(dev: Device, cmd, target, value):
         click.echo(await dev.set_power_settings(target, value))
     else:
         power = await dev.get_power()
-        click.echo(click.style(str(power), bold=power))
+        click.echo(click.style(str(power), bold=bool(power)))
 
 
 @cli.command()
@@ -280,7 +282,7 @@ async def zone(dev: Device, zone, activate):
     """Get and change outputs."""
     if zone:
         zone = await dev.get_zone(zone)
-        click.echo("%s %s" % ("Activating" if activate else "Deactivating", zone)) 
+        click.echo("%s %s" % ("Activating" if activate else "Deactivating", zone))
         await zone.activate(activate)
     else:
         click.echo("Zones:")
@@ -308,14 +310,14 @@ async def googlecast(dev: Device, target, value):
 @click.argument("scheme", required=False)
 @pass_dev
 @coro
-async def source(dev: Device, scheme):
+async def source(dev: Device, scheme: str):
     """List available sources.
 
     If no `scheme` is given, will list sources for all sc hemes.
     """
     if scheme is None:
-        schemes = await dev.get_schemes()
-        schemes = [scheme.scheme for scheme in schemes]  # noqa: T484
+        all_schemes = await dev.get_schemes()
+        schemes = [str(scheme.scheme) for scheme in all_schemes]
     else:
         schemes = [scheme]
 
@@ -323,7 +325,7 @@ async def source(dev: Device, scheme):
         try:
             sources = await dev.get_source_list(schema)
         except SongpalException as ex:
-            click.echo("Unable to get sources for %s" % schema)
+            click.echo("Unable to get sources for %s: %s" % (schema, ex))
             continue
         for src in sources:
             click.echo(src)
@@ -380,7 +382,8 @@ async def volume(dev: Device, volume, output):
     if output is not None:
         click.echo(vol)
     else:
-        [click.echo(x) for x in vol_controls]
+        for ctl in vol_controls:
+            click.echo(ctl)
 
 
 @cli.command()
@@ -577,8 +580,8 @@ async def notifications(dev: Device, notification: str, listen_all: bool):
 
     else:
         click.echo(click.style("Available notifications", bold=True))
-        for notification in notifications:
-            click.echo("* %s" % notification)
+        for notif in notifications:
+            click.echo("* %s" % notif)
 
 
 @cli.command()
@@ -645,11 +648,11 @@ pass_groupctl = click.make_pass_decorator(GroupControl)
 
 @cli.group()
 @click.pass_context
-@click.option('--url', required=True)
+@click.option("--url", required=True)
 @coro
 async def group(ctx, url):
     gc = GroupControl(url)
-    connect = await gc.connect()
+    await gc.connect()
     ctx.obj = gc
 
 
@@ -690,8 +693,8 @@ async def memory(gc: GroupControl):
 
 
 @group.command()
-@click.argument('name')
-@click.argument('slaves', nargs=-1, required=True)
+@click.argument("name")
+@click.argument("slaves", nargs=-1, required=True)
 @pass_groupctl
 @coro
 async def create(gc: GroupControl, name, slaves):
@@ -708,9 +711,10 @@ async def abort(gc: GroupControl):
     click.echo("Aborting current group..")
     click.echo(await gc.abort())
 
+
 @group.command()
 @pass_groupctl
-@click.argument('slaves', nargs=-1, required=True)
+@click.argument("slaves", nargs=-1, required=True)
 @coro
 async def add(gc: GroupControl, slaves):
     """Add speakers to group."""
@@ -720,17 +724,19 @@ async def add(gc: GroupControl, slaves):
 
 @group.command()
 @pass_groupctl
-@click.argument('slaves', nargs=-1, required=True)
+@click.argument("slaves", nargs=-1, required=True)
+@coro
 async def remove(gc: GroupControl, slaves):
     """Remove speakers from group."""
     click.echo("Removing from existing group: %s" % slaves)
     click.echo(await gc.remove(slaves))
 
 
-@group.command()
+@group.command()  # type: ignore # noqa: F811
 @pass_groupctl
-@click.argument('volume', type=int)
-async def volume(gc: GroupControl, volume):
+@click.argument("volume", type=int)
+@coro
+async def volume(gc: GroupControl, volume):  # noqa: F811
     """Adjust volume [-100, 100]"""
     click.echo("Setting volume to %s" % volume)
     click.echo(await gc.set_group_volume(volume))
@@ -738,7 +744,8 @@ async def volume(gc: GroupControl, volume):
 
 @group.command()
 @pass_groupctl
-@click.argument('mute', type=bool)
+@click.argument("mute", type=bool)
+@coro
 async def mute(gc: GroupControl, mute):
     """(Un)mute group."""
     click.echo("Muting group: %s" % mute)
@@ -747,6 +754,7 @@ async def mute(gc: GroupControl, mute):
 
 @group.command()
 @pass_groupctl
+@coro
 async def play(gc: GroupControl):
     """Play?"""
     click.echo("Sending play command: %s" % await gc.play())
@@ -754,6 +762,7 @@ async def play(gc: GroupControl):
 
 @group.command()
 @pass_groupctl
+@coro
 async def stop(gc: GroupControl):
     """Stop playing?"""
     click.echo("Sending stop command: %s" % await gc.stop())

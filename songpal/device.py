@@ -1,20 +1,19 @@
 """Module presenting a single supported device."""
 import asyncio
-import aiohttp
-from collections import defaultdict
 import itertools
-import json
 import logging
+from collections import defaultdict
 from pprint import pformat as pf
 from typing import Any, Dict, List
 from urllib.parse import urlparse
+
+import aiohttp
 
 from songpal.common import SongpalException
 from songpal.containers import (
     Content,
     ContentInfo,
     Input,
-    Zone,
     InterfaceInfo,
     PlayInfo,
     Power,
@@ -27,8 +26,9 @@ from songpal.containers import (
     SupportedFunctions,
     Sysinfo,
     Volume,
+    Zone,
 )
-from songpal.notification import Notification, ConnectChange
+from songpal.notification import ConnectChange, Notification
 from songpal.service import Service
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,28 +91,34 @@ class Device:
         if self.debug > 1:
             _LOGGER.debug("> POST %s with body: %s", self.guide_endpoint, payload)
 
-        async with aiohttp.ClientSession(headers=headers) as session:
-            res = await session.post(self.guide_endpoint, json=payload, headers=headers)
-            if self.debug > 1:
-                _LOGGER.debug("Received %s: %s" % (res.status_code, res.text))
-            if res.status != 200:
-                raise SongpalException(
-                    "Got a non-ok (status %s) response for %s" % (res.status, method),
-                    error=await res.json()["error"],
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                res = await session.post(
+                    self.guide_endpoint, json=payload, headers=headers
                 )
+                if self.debug > 1:
+                    _LOGGER.debug("Received %s: %s" % (res.status, res.text))
+                if res.status != 200:
+                    res_json = await res.json(content_type=None)
+                    raise SongpalException(
+                        "Got a non-ok (status %s) response for %s"
+                        % (res.status, method),
+                        error=res_json.get("error"),
+                    )
 
-            res = await res.json()
+                res_json = await res.json(content_type=None)
+        except (aiohttp.InvalidURL, aiohttp.ClientConnectionError) as ex:
+            raise SongpalException("Unable to do POST request: %s" % ex) from ex
 
-        # TODO handle exceptions from POST? This used to raise SongpalException
-        #      on requests.RequestException (Unable to get APIs).
-
-        if "error" in res:
-            raise SongpalException("Got an error for %s" % method, error=res["error"])
+        if "error" in res_json:
+            raise SongpalException(
+                "Got an error for %s" % method, error=res_json["error"]
+            )
 
         if self.debug > 1:
-            _LOGGER.debug("Got %s: %s", method, pf(res))
+            _LOGGER.debug("Got %s: %s", method, pf(res_json))
 
-        return res
+        return res_json
 
     async def request_supported_methods(self):
         """Return JSON formatted supported API."""
@@ -259,12 +265,20 @@ class Device:
     async def get_inputs(self) -> List[Input]:
         """Return list of available outputs."""
         res = await self.services["avContent"]["getCurrentExternalTerminalsStatus"]()
-        return [Input.make(services=self.services, **x) for x in res if 'meta:zone:output' not in x['meta']]
+        return [
+            Input.make(services=self.services, **x)
+            for x in res
+            if "meta:zone:output" not in x["meta"]
+        ]
 
     async def get_zones(self) -> List[Zone]:
         """Return list of available zones."""
         res = await self.services["avContent"]["getCurrentExternalTerminalsStatus"]()
-        zones = [Zone.make(services=self.services, **x) for x in res if 'meta:zone:output' in x['meta']]
+        zones = [
+            Zone.make(services=self.services, **x)
+            for x in res
+            if "meta:zone:output" in x["meta"]
+        ]
         if not zones:
             raise SongpalException("Device has no zones")
         return zones

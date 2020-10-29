@@ -7,14 +7,15 @@ import aiohttp
 from songpal.common import ProtocolType, SongpalException
 from songpal.method import Method, MethodSignature
 from songpal.notification import (
-    Notification,
-    ConnectChange,
     ContentChange,
+    Notification,
     NotificationChange,
+    PlaybackFunctionChange,
     PowerChange,
     SettingChange,
     SoftwareUpdateChange,
     VolumeChange,
+    ZoneActivatedChange,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class Service:
     """Service presents an endpoint providing a set of methods."""
+
     def __init__(self, name, endpoint, protocol, idgen, debug=0):
         """Service constructor.
 
@@ -43,7 +45,7 @@ class Service:
         async with aiohttp.ClientSession() as session:
             req = {
                 "method": "getMethodTypes",
-                "params": [''],
+                "params": [""],
                 "version": "1.0",
                 "id": next(idgen),
             }
@@ -55,7 +57,7 @@ class Service:
                     return res
             else:
                 res = await session.post(endpoint, json=req)
-                json = await res.json()
+                json = await res.json(content_type=None)
 
                 return json
 
@@ -88,9 +90,7 @@ class Service:
         # creation here we want to pass the created service class to methods.
         service = cls(service_name, service_endpoint, protocol, idgen, debug)
 
-        sigs = await cls.fetch_signatures(
-            service_endpoint, protocol, idgen
-        )
+        sigs = await cls.fetch_signatures(service_endpoint, protocol, idgen)
 
         if debug > 1:
             _LOGGER.debug("Signatures: %s", sigs)
@@ -104,8 +104,11 @@ class Service:
             name = sig[0]
             parsed_sig = MethodSignature.from_payload(*sig)
             if name in methods:
-                _LOGGER.debug("Got duplicate signature for %s, existing was %s. Keeping the existing one",
-                              parsed_sig, methods[name])
+                _LOGGER.debug(
+                    "Got duplicate signature for %s, existing was %s, keeping it.",
+                    parsed_sig,
+                    methods[name],
+                )
             else:
                 methods[name] = Method(service, parsed_sig, debug)
 
@@ -171,7 +174,9 @@ class Service:
                 "id": next(self.idgen),
             }
             if self.debug > 1:
-                _LOGGER.debug("sending request: %s (proto: %s)", req, self.active_protocol)
+                _LOGGER.debug(
+                    "sending request: %s (proto: %s)", req, self.active_protocol
+                )
             if self.active_protocol == ProtocolType.WebSocket:
                 async with session.ws_connect(
                     self.endpoint, timeout=self.timeout, heartbeat=self.timeout * 5
@@ -194,7 +199,7 @@ class Service:
                     return res
             else:
                 res = await session.post(self.endpoint, json=req)
-                return await res.json()
+                return await res.json(content_type=None)
 
     def wrap_notification(self, data):
         """Convert notification JSON to a notification class."""
@@ -204,6 +209,8 @@ class Service:
             change = params[0]
             if method == "notifyPowerStatus":
                 return PowerChange.make(**change)
+            elif method == "notifyExternalTerminalStatus":
+                return ZoneActivatedChange.make(**change)
             elif method == "notifyVolumeInformation":
                 return VolumeChange.make(**change)
             elif method == "notifyPlayingContentInfo":
@@ -212,8 +219,12 @@ class Service:
                 return SettingChange.make(**change)
             elif method == "notifySWUpdateInfo":
                 return SoftwareUpdateChange.make(**change)
+            elif method == "notifyAvailablePlaybackFunction":
+                return PlaybackFunctionChange.make(**change)
             else:
-                _LOGGER.warning("Got unknown notification type: %s", method)
+                _LOGGER.warning(
+                    "Got unknown notification type: %s - params: %s", method, params
+                )
         elif "result" in data:
             result = data["result"][0]
             if "enabled" in result and "enabled" in result:
@@ -292,10 +303,13 @@ class Service:
         }
 
     def __repr__(self):
-        return "<Service %s: %s methods, %s notifications, protocols: %s (active: %s)" % (
-            self.name,
-            len(self.methods),
-            len(self.notifications),
-            self.protocols,
-            self.active_protocol,
+        return (
+            "<Service %s: %s methods, %s notifications, protocols: %s (active: %s)"
+            % (
+                self.name,
+                len(self.methods),
+                len(self.notifications),
+                self.protocols,
+                self.active_protocol,
+            )
         )

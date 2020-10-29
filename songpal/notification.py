@@ -1,10 +1,11 @@
 """Module for device notifications."""
 import logging
 from pprint import pformat as pf
+from typing import List, Optional
 
 import attr
-from songpal.containers import (Power, SoftwareUpdateInfo,
-                                make, convert_to_bool)
+
+from songpal.containers import Power, SoftwareUpdateInfo, convert_to_bool, make
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class Notification:
     In order to listen for notifications, call `activate(callback)`
     with a coroutine to be called when a notification is received.
     """
+
     def __init__(self, endpoint, switch_method, payload):
         """Notification constructor.
 
@@ -51,7 +53,6 @@ class Notification:
 
 class ChangeNotification:
     """Dummy base-class for notifications."""
-    pass
 
 
 @attr.s
@@ -59,37 +60,61 @@ class ConnectChange(ChangeNotification):
     connected = attr.ib()
     exception = attr.ib(default=None)
 
+
 @attr.s
 class PowerChange(ChangeNotification, Power):
     """Notification for power status change."""
-    pass
+
+
+@attr.s
+class ZoneActivatedChange(ChangeNotification):
+    """Notification for zone power status change."""
+
+    make = classmethod(make)
+
+    def _convert_bool(x) -> bool:
+        return x == "active"
+
+    active = attr.ib(converter=_convert_bool)
+    connection = attr.ib()
+    label = attr.ib()
+    uri = attr.ib()
 
 
 @attr.s
 class SoftwareUpdateChange(ChangeNotification):
     """Notification for available software updates."""
+
     make = classmethod(make)
 
-    def _convert_if_available(x):
+    def _convert_if_available(x) -> Optional[SoftwareUpdateInfo]:
         if x is not None:
-            return SoftwareUpdateInfo.make(**x[0])
+            return SoftwareUpdateInfo.make(**x[0])  # type: ignore
 
-    isUpdatable = attr.ib(convert=convert_to_bool)
-    swInfo = attr.ib(convert=_convert_if_available)
+        return None
+
+    isUpdatable = attr.ib(converter=convert_to_bool)
+    swInfo = attr.ib(converter=_convert_if_available)
 
 
 @attr.s
 class VolumeChange(ChangeNotification):
     """Notification for volume changes."""
+
     make = classmethod(make)
 
-    mute = attr.ib(convert=lambda x: True if x == "on" else False)
+    def _convert_bool(x) -> bool:
+        return x == "on"
+
+    mute = attr.ib(converter=_convert_bool)
     volume = attr.ib()
+    output = attr.ib()
 
 
 @attr.s
 class SettingChange(ChangeNotification):
     """Notification for settings change."""
+
     make = classmethod(make)
 
     titleTextID = attr.ib()
@@ -103,13 +128,17 @@ class SettingChange(ChangeNotification):
     currentValue = attr.ib()
 
     def __attrs_post_init__(self):
-        if self.type == 'directory':
-            _LOGGER.debug("Got SettingChange for directory %s (see #36), "
-                          "ignoring..", self.titleTextID)
+        if self.type == "directory":
+            _LOGGER.debug(
+                "Got SettingChange for directory %s (see #36), " "ignoring..",
+                self.titleTextID,
+            )
             return
         if self.apiMappingUpdate is None:
-            _LOGGER.warning("Got SettingChange for %s without "
-                            "apiMappingUpdate, ignoring..", self.titleTextID)
+            _LOGGER.warning(
+                "Got SettingChange for %s without " "apiMappingUpdate, ignoring..",
+                self.titleTextID,
+            )
             return
         self.currentValue = self.apiMappingUpdate["currentValue"]
         self.target = self.apiMappingUpdate["target"]
@@ -126,6 +155,7 @@ class SettingChange(ChangeNotification):
 @attr.s
 class ContentChange(ChangeNotification):
     """This gets sent as a notification when the source changes."""
+
     make = classmethod(make)
 
     contentKind = attr.ib()
@@ -134,6 +164,11 @@ class ContentChange(ChangeNotification):
     output = attr.ib()
     uri = attr.ib()
     applicationName = attr.ib()
+
+    kind = attr.ib()
+    mediaType = attr.ib()
+    parentUri = attr.ib()
+    stateInfo = attr.ib()
 
     @property
     def is_input(self):
@@ -144,13 +179,27 @@ class ContentChange(ChangeNotification):
 @attr.s
 class NotificationChange(ChangeNotification):
     """Container for storing information about state of Notifications."""
+
     make = classmethod(make)
 
-    enabled = attr.ib(convert=lambda x: [x["name"] for x in x])
-    disabled = attr.ib(convert=lambda x: [x["name"] for x in x])
+    def _extract_notification_names(x) -> List[str]:
+        return [x["name"] for x in x]  # type: ignore
+
+    enabled = attr.ib(converter=_extract_notification_names)
+    disabled = attr.ib(converter=_extract_notification_names)
 
     def __str__(self):
         return "<NotificationChange enabled: %s disabled: %s>" % (
             ",".join(self.enabled),
             ",".join(self.disabled),
         )
+
+
+@attr.s
+class PlaybackFunctionChange(ChangeNotification):
+    """Container for storing playback function changes."""
+
+    make = classmethod(make)
+
+    functions = attr.ib()
+    uri = attr.ib()
